@@ -1,88 +1,119 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 
-const styleOptions = [
-  {
-    value: "anime",
-    label: "Studio Ghibli",
-    description: "Classic Ghibli magic",
-    promptAddon: "in the style of Studio Ghibli",
-  },
-  {
-    value: "anime",
-    label: "Spirited Away",
-    description: "Mystical bathhouse vibes",
-    promptAddon: "spirited away bathhouse spirits, mystical anime setting",
-  },
-  {
-    value: "anime",
-    label: "My Neighbor Totoro",
-    description: "Whimsical forest magic",
-    promptAddon: "totoro forest with magical creatures, ghibli style",
-  },
-  {
-    value: "fantasy-art",
-    label: "Princess Mononoke",
-    description: "Epic nature scenes",
-    promptAddon: "mononoke epic forest battle, nature gods, ghibli-style",
-  },
-  {
-    value: "cinematic",
-    label: "Howl's Castle",
-    description: "Flying castle aesthetic",
-    promptAddon: "howl's moving castle steampunk sky city, ghibli-inspired",
-  },
-  {
-    value: "anime",
-    label: "Kiki's Delivery",
-    description: "Charming European style",
-    promptAddon: "kiki flying on broomstick above a cozy town, ghibli feel",
-  },
-];
-
-const TextToImageSection = () => {
-  const [generatedImage, setGeneratedImage] = useState(null);
+export default function ImageToImageForm() {
+  const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [style, setStyle] = useState(styleOptions[0]);
+  const [style, setStyle] = useState("ghibli");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [resultImage, setResultImage] = useState(null);
   const [downloadUrl, setDownloadUrl] = useState(null);
+  const [error, setError] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef(null);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      setError("Please enter a prompt to generate your artwork.");
+  const styleOptions = [
+    {
+      value: "ghibli",
+      label: "Studio Ghibli",
+      description: "Classic Ghibli magic",
+    },
+    {
+      value: "spirited-away",
+      label: "Spirited Away",
+      description: "Mystical bathhouse vibes",
+    },
+    {
+      value: "totoro",
+      label: "My Neighbor Totoro",
+      description: "Whimsical forest magic",
+    },
+    {
+      value: "mononoke",
+      label: "Princess Mononoke",
+      description: "Epic nature scenes",
+    },
+    {
+      value: "castle",
+      label: "Howl's Castle",
+      description: "Flying castle aesthetic",
+    },
+    {
+      value: "kiki",
+      label: "Kiki's Delivery",
+      description: "Charming European style",
+    },
+  ];
+
+  const handleImageChange = (file) => {
+    if (file && file.type.startsWith("image/")) {
+      setImage(file);
+      setPreview(URL.createObjectURL(file));
+      setError(null);
+    } else {
+      setError("Please select a valid image file.");
+    }
+  };
+
+  const handleFileInput = (e) => {
+    const file = e.target.files[0];
+    if (file) handleImageChange(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleImageChange(file);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!image || !prompt.trim()) {
+      setError("Please provide both an image and a prompt.");
       return;
     }
 
     setLoading(true);
     setError(null);
-    setGeneratedImage(null);
+    setResultImage(null);
     setDownloadUrl(null);
 
+    const formData = new FormData();
+    formData.append("image", image);
+    formData.append(
+      "prompt",
+      `${prompt}, Studio Ghibli style, ${style} aesthetic, magical atmosphere, detailed artwork`
+    );
+    formData.append("style", style);
+
     try {
-      const response = await fetch(
-        "http://localhost:8080/api/v1/generate-from-text",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            prompt: `${prompt}, ${style.promptAddon}, magical atmosphere, detailed artwork`,
-            style: style.value,
-          }),
-        }
-      );
+      const response = await fetch("http://localhost:8080/api/v1/generate", {
+        method: "POST",
+        body: formData,
+      });
 
       if (!response.ok) {
-        throw new Error("Failed to generate image. Please try again.");
+        throw new Error("Generation failed. Please try again.");
       }
 
       const blob = await response.blob();
       const imageUrl = URL.createObjectURL(blob);
-      setGeneratedImage(imageUrl);
+      setResultImage(imageUrl);
       setDownloadUrl(imageUrl);
-    } catch (err) {
-      setError(err.message || "Something went wrong. Please try again.");
+    } catch (error) {
+      console.error(error);
+      setError("Error generating image. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -92,7 +123,7 @@ const TextToImageSection = () => {
     if (downloadUrl) {
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.download = `ghibli-art-${Date.now()}.png`;
+      link.download = `ghibli-transformed-${Date.now()}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -102,7 +133,7 @@ const TextToImageSection = () => {
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleGenerate();
+      handleSubmit(e);
     }
   };
 
@@ -111,10 +142,10 @@ const TextToImageSection = () => {
       <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl border border-amber-100 p-8">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-amber-800 mb-2">
-            Text to Ghibli Art
+            Image to Ghibli Art
           </h2>
           <p className="text-amber-700">
-            Describe your magical scene and watch it come to life
+            Transform your photos into magical Ghibli-style artwork
           </p>
         </div>
 
@@ -142,19 +173,94 @@ const TextToImageSection = () => {
           </div>
         )}
 
-        <div className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Image Upload */}
+          <div>
+            <label className="block text-sm font-semibold text-amber-800 mb-2">
+              Upload Your Image
+            </label>
+            <div
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
+                isDragOver
+                  ? "border-amber-500 bg-amber-50"
+                  : "border-amber-200 hover:border-amber-300"
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {preview ? (
+                <div className="space-y-4">
+                  <img
+                    src={preview}
+                    alt="Preview"
+                    className="w-48 h-48 object-cover rounded-lg mx-auto shadow-lg"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImage(null);
+                      setPreview("");
+                      setResultImage(null);
+                      setDownloadUrl(null);
+                    }}
+                    className="text-amber-600 hover:text-amber-800 text-sm font-medium"
+                  >
+                    Change Image
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <svg
+                    className="w-16 h-16 text-amber-400 mx-auto"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                    />
+                  </svg>
+                  <div>
+                    <p className="text-lg font-semibold text-amber-800">
+                      Drop your image here
+                    </p>
+                    <p className="text-amber-600">or click to browse</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition-colors duration-200"
+                  >
+                    Choose File
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileInput}
+                className="hidden"
+              />
+            </div>
+          </div>
+
           {/* Prompt Input */}
           <div>
             <label className="block text-sm font-semibold text-amber-800 mb-2">
-              Describe Your Scene
+              Describe Your Transformation
             </label>
             <textarea
               className="w-full p-4 border-2 border-amber-200 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all duration-300 resize-none"
-              rows={4}
+              rows={3}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="A magical forest with glowing spirits, a young girl in a red dress, Studio Ghibli style..."
+              placeholder="Transform this into a magical Ghibli scene with spirits and enchanted forest..."
               disabled={loading}
             />
             <p className="text-sm text-amber-600 mt-2">
@@ -170,10 +276,11 @@ const TextToImageSection = () => {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {styleOptions.map((option) => (
                 <button
-                  key={option.label}
-                  onClick={() => setStyle(option)}
+                  key={option.value}
+                  type="button"
+                  onClick={() => setStyle(option.value)}
                   className={`p-3 rounded-xl border-2 transition-all duration-300 text-left ${
-                    style.label === option.label
+                    style === option.value
                       ? "border-amber-500 bg-amber-50 text-amber-800"
                       : "border-amber-200 hover:border-amber-300 bg-white"
                   }`}
@@ -190,13 +297,13 @@ const TextToImageSection = () => {
 
           {/* Generate Button */}
           <button
+            type="submit"
             className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all duration-300 flex items-center justify-center gap-2 ${
-              loading
+              loading || !image || !prompt.trim()
                 ? "bg-gray-400 cursor-not-allowed"
                 : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105"
             }`}
-            onClick={handleGenerate}
-            disabled={loading || !prompt.trim()}
+            disabled={loading || !image || !prompt.trim()}
           >
             {loading ? (
               <>
@@ -220,7 +327,7 @@ const TextToImageSection = () => {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   ></path>
                 </svg>
-                Creating Your Masterpiece...
+                Transforming Your Image...
               </>
             ) : (
               <>
@@ -234,29 +341,29 @@ const TextToImageSection = () => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
-                Generate Artwork
+                Transform Image
               </>
             )}
           </button>
-        </div>
+        </form>
 
         {/* Generated Image */}
-        {generatedImage && (
+        {resultImage && (
           <div className="mt-8">
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
               <img
-                src={generatedImage}
-                alt="Generated Ghibli Art"
+                src={resultImage}
+                alt="Transformed Ghibli Art"
                 className="w-full h-auto object-cover"
               />
               <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-amber-800">
-                      Your Ghibli Masterpiece
+                      Your Transformed Masterpiece
                     </h3>
                     <p className="text-sm text-amber-600">
                       Ready to download and share!
@@ -289,6 +396,4 @@ const TextToImageSection = () => {
       </div>
     </div>
   );
-};
-
-export default TextToImageSection;
+}
